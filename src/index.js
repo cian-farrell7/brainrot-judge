@@ -367,61 +367,221 @@ async function handleVerifyToken(request, env, corsHeaders) {
 // ===== AI RATING ENDPOINTS =====
 
 async function handleAIRating(request, env, ctx, corsHeaders) {
-    const authCheck = await verifyAuth(request, env);
-    if (!authCheck.authenticated) {
-        return new Response(JSON.stringify({ error: 'Authentication required' }), {
-            status: 401,
+    try {
+        // Verify authentication
+        const authCheck = await verifyAuth(request, env);
+        if (!authCheck.authenticated) {
+            return new Response(JSON.stringify({ error: 'Authentication required' }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Parse request body
+        let caption, image;
+        try {
+            const body = await request.json();
+            caption = body.caption;
+            image = body.image;
+        } catch (parseError) {
+            console.error('Error parsing request body:', parseError);
+            return new Response(JSON.stringify({
+                error: 'Invalid request body',
+                details: parseError.message
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Validate caption
+        if (!caption || typeof caption !== 'string' || caption.trim().length === 0) {
+            return new Response(JSON.stringify({ error: 'Caption is required and must be a non-empty string' }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        let ratings;
+        let predictionId;
+        let slangAnalysis;
+
+        try {
+            // Initialize slang engine
+            const slangEngine = new BrainrotSlangEngine(BRAINROT_DICTIONARY);
+            slangAnalysis = slangEngine.analyzeText(caption);
+        } catch (slangError) {
+            console.error('Error analyzing slang:', slangError);
+            // Continue with default values if slang analysis fails
+            slangAnalysis = {
+                score: 0,
+                detectedTerms: [],
+                density: 0,
+                categories: {}
+            };
+        }
+
+        try {
+            // Calculate ratings
+            ratings = calculateBrainrotScore(
+                caption,
+                slangAnalysis,
+                !image  // hasImage parameter
+            );
+        } catch (ratingError) {
+            console.error('Error calculating ratings:', ratingError);
+            // Use fallback ratings if calculation fails
+            ratings = {
+                chaos_rating: 10,
+                absurdity_rating: 10,
+                meme_rating: 10,
+                cursed_rating: 10,
+                confidence: 0.5
+            };
+        }
+
+        // Generate prediction ID
+        predictionId = crypto.randomUUID();
+
+        // Try to store prediction in database with error handling
+        try {
+            // First, check if the table exists
+            const tableCheck = await env.DB.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_predictions'"
+            ).first();
+
+            if (!tableCheck) {
+                console.log('ai_predictions table does not exist, creating it...');
+                // Create the table if it doesn't exist
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS ai_predictions (
+                        id TEXT PRIMARY KEY,
+                        caption TEXT NOT NULL,
+                        image_url TEXT,
+                        ratings_json TEXT NOT NULL,
+                        confidence REAL DEFAULT 0.5,
+                        model_version TEXT DEFAULT 'v1.0',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run();
+            }
+
+            // Now insert the prediction
+            await env.DB.prepare(`
+                INSERT INTO ai_predictions 
+                (id, caption, image_url, ratings_json, confidence, model_version, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            `).bind(
+                predictionId,
+                caption.substring(0, 1000),  // Limit caption length to prevent DB errors
+                image ? image.substring(0, 500) : null,  // Limit image URL/data length
+                JSON.stringify(ratings),
+                ratings.confidence || 0.85,
+                'v1.0'
+            ).run();
+        } catch (dbError) {
+            console.error('Database error storing prediction:', dbError);
+            // Continue without storing - the rating still works
+            console.log('Continuing without database storage');
+        }
+
+        // Return successful response
+        return new Response(JSON.stringify({
+            success: true,
+            ratings,
+            analysis: slangAnalysis,
+            predictionId,
+            aiConfidence: ratings.confidence || 0.85
+        }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+    } catch (error) {
+        // Catch-all error handler
+        console.error('Unexpected error in handleAIRating:', error);
+        return new Response(JSON.stringify({
+            error: 'Internal server error',
+            message: error.message,
+            stack: error.stack
+        }), {
+            status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
-    const { caption, image } = await request.json();
+}
 
-    if (!caption) {
-        return new Response(JSON.stringify({ error: 'Caption is required' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+// Also add this helper function if it doesn't exist
+function calculateBrainrotScore(caption, slangAnalysis, noImage = false) {
+    // Base scores
+    let chaosScore = 10;
+    let absurdityScore = 10;
+    let memeScore = 10;
+    let cursedScore = 10;
+
+    // Analyze caption length
+    const captionLength = caption.length;
+    if (captionLength > 100) chaosScore += 5;
+    if (captionLength > 200) chaosScore += 5;
+
+    // Check for repetition
+    const words = caption.toLowerCase().split(/\s+/);
+    const uniqueWords = new Set(words);
+    const repetitionRatio = 1 - (uniqueWords.size / words.length);
+    if (repetitionRatio > 0.3) chaosScore += 5;
+
+    // Check for caps
+    const capsRatio = (caption.match(/[A-Z]/g) || []).length / captionLength;
+    if (capsRatio > 0.3) chaosScore += 5;
+
+    // Slang analysis impact
+    if (slangAnalysis) {
+        const slangBonus = Math.min(10, Math.floor(slangAnalysis.score / 10));
+        memeScore += slangBonus;
+        absurdityScore += Math.floor(slangBonus / 2);
+
+        // Category bonuses
+        if (slangAnalysis.categories?.chaos > 2) chaosScore += 5;
+        if (slangAnalysis.categories?.meme > 2) memeScore += 5;
+        if (slangAnalysis.categories?.trending > 1) absurdityScore += 3;
+        if (slangAnalysis.categories?.elite > 0) cursedScore += 5;
     }
 
-    let ratings;
-    let predictionId;
-    let slangAnalysis;
+    // Check for emojis
+    const emojiCount = (caption.match(/[\u{1F300}-\u{1F9FF}]/gu) || []).length;
+    if (emojiCount > 0) memeScore += Math.min(5, emojiCount * 2);
 
+    // Check for specific patterns
+    if (/fr fr|no cap|on god|deadass/i.test(caption)) absurdityScore += 5;
+    if (/ohio|rizz|gyatt|sigma/i.test(caption)) memeScore += 5;
+    if (/cursed|blursed|unhinged/i.test(caption)) cursedScore += 5;
 
-    const slangEngine = new BrainrotSlangEngine(BRAINROT_DICTIONARY);
-    slangAnalysis = slangEngine.analyzeText(caption);
+    // Image penalty if no image
+    if (noImage) {
+        memeScore = Math.max(5, memeScore - 5);
+        cursedScore = Math.max(5, cursedScore - 5);
+    }
 
-    ratings = calculateBrainrotScore(
-        caption,
-        slangAnalysis,
-        !!image
-    );
+    // Normalize scores (max 20)
+    chaosScore = Math.min(20, Math.max(0, chaosScore));
+    absurdityScore = Math.min(20, Math.max(0, absurdityScore));
+    memeScore = Math.min(20, Math.max(0, memeScore));
+    cursedScore = Math.min(20, Math.max(0, cursedScore));
 
-    predictionId = crypto.randomUUID();
+    // Calculate confidence based on slang detection and pattern matches
+    let confidence = 0.7;
+    if (slangAnalysis && slangAnalysis.detectedTerms?.length > 5) confidence += 0.1;
+    if (emojiCount > 2) confidence += 0.05;
+    if (captionLength > 50) confidence += 0.05;
+    confidence = Math.min(0.95, confidence);
 
-    // Store prediction with error handling
-    await env.DB.prepare(`
-                    INSERT INTO ai_predictions 
-                    (id, caption, image_url, ratings_json, confidence, model_version, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-                `).bind(
-        predictionId,
-        caption,
-        image || null,
-        JSON.stringify(ratings),
-        ratings.confidence || 0.85,
-        'v1.0'
-    ).run();
-
-    return new Response(JSON.stringify({
-        success: true,
-        ratings,
-        analysis: slangAnalysis,
-        predictionId,
-        aiConfidence: ratings.confidence || 0.85
-    }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return {
+        chaos_rating: chaosScore,
+        absurdity_rating: absurdityScore,
+        meme_rating: memeScore,
+        cursed_rating: cursedScore,
+        confidence: confidence
+    };
 }
 
 async function collectRatingFeedback(request, env, corsHeaders) {
