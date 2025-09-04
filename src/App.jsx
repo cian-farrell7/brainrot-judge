@@ -62,6 +62,11 @@ function AppContent() {
         return <LoginPage onSignIn={() => window.location.reload()} />;
     }
 
+    const isAdmin = () => {
+        const adminUsers = ['admin', 'spit-on-it'];
+        return adminUsers.includes(user?.username);
+    };
+
     // Fetch functions
     const fetchDailyChallenge = async () => {
         try {
@@ -389,18 +394,19 @@ function AppContent() {
             <div className="max-w-7xl mx-auto p-4">
                 {/* Tab Navigation */}
                 <div className="flex gap-2 bg-gray-800 rounded-lg p-1 mb-6 overflow-x-auto">
-                    {['upload', 'leaders', 'history', 'achievements', 'ai-insights', 'admin'].map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`flex-1 min-w-[100px] py-2 px-4 rounded-lg transition-all whitespace-nowrap ${activeTab === tab
-                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                                : 'text-gray-400 hover:text-white'
-                                }`}
-                        >
-                            {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
-                        </button>
-                    ))}
+                    {['upload', 'leaders', 'history', 'achievements', 'ai-insights']
+                        .concat(isAdmin() ? ['admin'] : []).map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`flex-1 min-w-[100px] py-2 px-4 rounded-lg transition-all whitespace-nowrap ${activeTab === tab
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                                    : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
+                            </button>
+                        ))}
                 </div>
 
                 {/* Upload Tab */}
@@ -556,20 +562,25 @@ function AppContent() {
                             <h2 className="text-2xl font-bold mb-6">Leaderboard</h2>
                             <div className="space-y-3">
                                 {leaderboard.map((user, index) => (
-                                    <div key={user.user_id} className="bg-gray-700 rounded-lg p-4 flex justify-between items-center">
+                                    <div key={user.user_id || user.user_name || index} className="bg-gray-700 rounded-lg p-4 flex justify-between items-center">
                                         <div className="flex items-center gap-3">
                                             <span className="text-2xl font-bold">
                                                 {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                                             </span>
-                                            <span className="font-medium">{user.user_id}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-purple-400">👤</span>
+                                                <span className="font-medium text-purple-400">
+                                                    @{user.user_name || user.user_id || 'Unknown'}  {/* FIXED: Changed sub to user */}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-lg font-bold text-purple-400">
-                                                {user.avg_score?.toFixed(1)} avg
-                                            </div>
+                                                {(user.avg_score || 0).toFixed(1)} avg
+                            </div>
                                             <div className="text-sm text-gray-400">
-                                                {user.submission_count} submissions
-                                            </div>
+                                                {user.submission_count || 0} submissions
+                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -598,18 +609,56 @@ function AppContent() {
                                     .map(sub => (
                                         <div key={sub.id} className="bg-gray-700 rounded-lg p-4">
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className="font-medium text-purple-400">{sub.user_id}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-purple-400">👤</span>
+                                                    <span className="font-medium text-purple-400">
+                                                        @{sub.user_id || sub.user_name || 'Anonymous'}
+                                                    </span>
+                                                </div>
+                                                // Add this temporarily in the History tab to debug:
+                                                {submissions.slice(0, 1).map(sub => (
+                                                    <div key="debug" className="bg-yellow-600 p-2 mb-4 rounded text-xs">
+                                                        Debug: user_id="{sub.user_id}", user_name="{sub.user_name}"
+                                                    </div>
+                                                ))}
                                                 <span className="text-2xl font-bold">{sub.grade}</span>
                                             </div>
+
+                                            {/* ===== ADD IMAGE HERE - THIS IS NEW ===== */}
+                                            {(sub.thumbnail_url || sub.image_url) && (
+                                                <div className="mb-3 rounded-lg overflow-hidden">
+                                                    <img
+                                                        src={sub.thumbnail_url || sub.image_url}
+                                                        alt="Submission"
+                                                        className="w-full max-w-sm h-48 object-cover"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                            {/* ===== END OF IMAGE SECTION ===== */}
+
                                             <p className="text-gray-300 mb-2">{sub.caption}</p>
                                             <div className="flex justify-between items-center text-sm">
-                                                <span>Score: {sub.total_score}/100</span>
+                                                <span className="text-yellow-400 font-semibold">
+                                                    Score: {sub.totalScore || sub.total_score ||
+                                                        (sub.chaos_rating + sub.absurdity_rating + sub.meme_rating +
+                                                            sub.cringe_rating + sub.cursed_rating) || 0}/100
+                                </span>
                                                 {sub.ai_confidence > 0 && (
                                                     <span className="text-purple-400">
                                                         AI: {(sub.ai_confidence * 100).toFixed(0)}% confident
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {/* ===== OPTIONAL: ADD TIMESTAMP ===== */}
+                                            {sub.created_at && (
+                                                <div className="text-xs text-gray-500 mt-2">
+                                                    {new Date(sub.created_at).toLocaleString()}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                             </div>
@@ -767,7 +816,18 @@ function AppContent() {
                 )}
 
                 {/* Admin Tab */}
-                {activeTab === 'admin' && (
+                {activeTab === 'admin' && !isAdmin() && (
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-red-800 rounded-xl p-6 text-center">
+                            <h2 className="text-2xl font-bold mb-4">🚫 Access Denied</h2>
+                            <p className="text-gray-300">You don't have permission to access the admin panel.</p>
+                            <button onClick={() => setActiveTab('upload')} className="mt-4 px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg">
+                                Go Back
+            </button>
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'admin' && isAdmin() && (
                     <div className="max-w-4xl mx-auto">
                         <div className="bg-gray-800 rounded-xl p-6">
                             <h2 className="text-2xl font-bold mb-6">Admin Panel</h2>
