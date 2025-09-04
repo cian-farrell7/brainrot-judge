@@ -399,8 +399,8 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('upload')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'upload'
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                        : 'bg-gray-800 hover:bg-gray-700'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                            : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     📤 Upload
@@ -408,8 +408,8 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('history')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'history'
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                        : 'bg-gray-800 hover:bg-gray-700'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                            : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     📜 History
@@ -417,8 +417,8 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('leaderboard')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'leaderboard'
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                        : 'bg-gray-800 hover:bg-gray-700'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                            : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     🏆 Leaders
@@ -427,8 +427,8 @@ function AppContent() {
                     <button
                         onClick={() => setActiveTab('admin')}
                         className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'admin'
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                            : 'bg-gray-800 hover:bg-gray-700'
+                                ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                                : 'bg-gray-800 hover:bg-gray-700'
                             }`}
                     >
                         ⚙️ Admin
@@ -623,6 +623,164 @@ function AppContent() {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Insights Tab */}
+                {activeTab === 'insights' && (
+                    <div className="max-w-6xl mx-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* AI Accuracy Stats */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">🎯 AI Performance</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">Avg Confidence</span>
+                                        <span className="font-bold">
+                                            {submissions.length > 0
+                                                ? `${(submissions.reduce((acc, s) => acc + (s.ai_confidence || 0.7), 0) / submissions.length * 100).toFixed(1)}%`
+                                                : 'N/A'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">AI-Rated</span>
+                                        <span className="font-bold">
+                                            {submissions.filter(s => s.autoRated).length}/{submissions.length}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">Feedback Given</span>
+                                        <span className="font-bold">
+                                            {submissions.filter(s => s.feedback_collected).length}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Score Distribution */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">📊 Score Distribution</h3>
+                                <div className="space-y-2">
+                                    {['S', 'A', 'B', 'C', 'F'].map(grade => {
+                                        const count = submissions.filter(s => s.grade === grade).length;
+                                        const percentage = submissions.length > 0 ? (count / submissions.length * 100) : 0;
+                                        return (
+                                            <div key={grade} className="flex items-center gap-3">
+                                                <span className="w-8 font-bold">{grade}:</span>
+                                                <div className="flex-1 bg-gray-700 rounded-full h-6 relative overflow-hidden">
+                                                    <div
+                                                        className="absolute h-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center px-2"
+                                                        style={{ width: `${percentage}%` }}
+                                                    >
+                                                        <span className="text-xs font-bold">{count}</span>
+                                                    </div>
+                                                </div>
+                                                <span className="text-sm text-gray-400 w-12">{percentage.toFixed(0)}%</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Category Averages */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">🎨 Category Averages</h3>
+                                <div className="space-y-3">
+                                    {['chaos', 'absurdity', 'memeability', 'unhinged'].map(category => {
+                                        const avg = submissions.length > 0
+                                            ? submissions.reduce((acc, s) => acc + (s[category] || 0), 0) / submissions.length
+                                            : 0;
+                                        return (
+                                            <div key={category}>
+                                                <div className="flex justify-between mb-1">
+                                                    <span className="capitalize text-sm">{category}</span>
+                                                    <span className="text-sm font-bold">{avg.toFixed(1)}/20</span>
+                                                </div>
+                                                <div className="bg-gray-700 rounded-full h-2">
+                                                    <div
+                                                        className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500"
+                                                        style={{ width: `${(avg / 20) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Recent AI Predictions */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">🔮 Recent AI Activity</h3>
+                                <div className="space-y-2 text-sm">
+                                    {submissions
+                                        .filter(s => s.autoRated)
+                                        .slice(0, 5)
+                                        .map((sub, idx) => (
+                                            <div key={idx} className="flex justify-between">
+                                                <span className="text-gray-400 truncate max-w-[150px]">
+                                                    {sub.caption}
+                                                </span>
+                                                <span className="font-bold text-purple-400">{sub.grade}</span>
+                                            </div>
+                                        ))}
+                                    {submissions.filter(s => s.autoRated).length === 0 && (
+                                        <div className="text-gray-500 text-center py-4">
+                                            No AI predictions yet
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Top Performers */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">🌟 Top Chaos Creators</h3>
+                                <div className="space-y-2">
+                                    {submissions
+                                        .sort((a, b) => b.totalScore - a.totalScore)
+                                        .slice(0, 5)
+                                        .map((sub, idx) => (
+                                            <div key={idx} className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xl">
+                                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                                                    </span>
+                                                    <span className="text-sm">{sub.user_id}</span>
+                                                </div>
+                                                <span className="font-bold">{sub.totalScore}/100</span>
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+
+                            {/* Stats Summary */}
+                            <div className="bg-gray-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold mb-4 text-purple-400">📈 Quick Stats</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="text-center">
+                                        <div className="text-2xl font-bold text-purple-400">{submissions.length}</div>
+                                        <div className="text-xs text-gray-400">Total Submissions</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-2xl font-bold text-pink-400">
+                                            {submissions.length > 0
+                                                ? (submissions.reduce((acc, s) => acc + s.totalScore, 0) / submissions.length).toFixed(0)
+                                                : '0'}
+                                        </div>
+                                        <div className="text-xs text-gray-400">Avg Score</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-2xl font-bold text-purple-400">
+                                            {submissions.filter(s => s.has_image).length}
+                                        </div>
+                                        <div className="text-xs text-gray-400">With Images</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-2xl font-bold text-pink-400">{userStreak}</div>
+                                        <div className="text-xs text-gray-400">Your Streak</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

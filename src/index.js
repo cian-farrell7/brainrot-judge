@@ -598,126 +598,150 @@ async function handleSlangAnalyze(request, env, corsHeaders) {
 // ===== MAIN SUBMISSION ENDPOINT =====
 
 async function handleSubmitWithAI(request, env, ctx, corsHeaders) {
-    const authCheck = await verifyAuth(request, env);
-    if (!authCheck.authenticated) {
-        return new Response(JSON.stringify({ error: 'Authentication required' }), {
-            status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-    }
-    const bodyText = await request.text();
-    const { caption, image, useAI = true } = JSON.parse(bodyText);
+    try {
+        const authCheck = await verifyAuth(request, env);
+        if (!authCheck.authenticated) {
+            return new Response(JSON.stringify({ error: 'Authentication required' }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
 
-    const userName = authCheck.user?.username || authCheck.user?.id;
+        const bodyText = await request.text();
+        const { caption, image, useAI = true } = JSON.parse(bodyText);
 
-    if (!userName) {
-        return new Response(JSON.stringify({
-            error: 'User information missing from token'
-        }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-    }
+        const userName = authCheck.user?.username || authCheck.user?.id;
 
-    if (!caption || caption.trim() === '') {
-        return new Response(JSON.stringify({ error: 'Caption is required' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-    }
+        if (!userName) {
+            return new Response(JSON.stringify({
+                error: 'User information missing from token'
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
 
-    // Generate AI ratings if requested
-    let aiRatings = null;
-    let predictionId = null;
+        if (!caption || caption.trim() === '') {
+            return new Response(JSON.stringify({ error: 'Caption is required' }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
 
-    if (useAI) {
-        const slangEngine = new BrainrotSlangEngine(BRAINROT_DICTIONARY);
-        const slangAnalysis = slangEngine.analyzeText(caption);
+        // Generate AI ratings if requested
+        let aiRatings = null;
+        let predictionId = null;
 
-        aiRatings = calculateBrainrotScore(
-            caption,
-            slangAnalysis,
-            !!image
-        );
+        if (useAI) {
+            const slangEngine = new BrainrotSlangEngine(BRAINROT_DICTIONARY);
+            const slangAnalysis = slangEngine.analyzeText(caption);
 
-        predictionId = crypto.randomUUID();
+            aiRatings = calculateBrainrotScore(
+                caption,
+                slangAnalysis,
+                !image  // noImage parameter
+            );
+
+            predictionId = crypto.randomUUID();
+
+            try {
+                await env.DB.prepare(`
+                    INSERT INTO ai_predictions 
+                    (id, caption, image_url, ratings_json, confidence, model_version, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                `).bind(
+                    predictionId,
+                    caption.substring(0, 1000),
+                    image ? image.substring(0, 500) : null,
+                    JSON.stringify(aiRatings),
+                    aiRatings.confidence || 0.85,
+                    'v1.0'
+                ).run();
+            } catch (dbError) {
+                console.error('Error storing AI prediction:', dbError);
+                // Continue without storing
+            }
+        }
+
+        const id = Math.floor(Math.random() * 1000000000);
+
+        // Use AI ratings or default values
+        const ratings = aiRatings || {
+            chaos_rating: 10,
+            absurdity_rating: 10,
+            meme_rating: 10,
+            cursed_rating: 10,
+            confidence: 0.5
+        };
+
+        // Calculate total score from individual ratings
+        const totalScore = Math.round(
+            ((ratings.chaos_rating || 10) +
+                (ratings.absurdity_rating || 10) +
+                (ratings.meme_rating || 10) +
+                (ratings.cursed_rating || 10)) * 2.5
+        );  // * 2.5 to scale to 100
+
+        const grade = totalScore >= 80 ? 'S' :
+            totalScore >= 60 ? 'A' :
+                totalScore >= 40 ? 'B' :
+                    totalScore >= 20 ? 'C' : 'F';
 
         await env.DB.prepare(`
-                        INSERT INTO ai_predictions 
-                        (id, caption, image_url, ratings_json, confidence, model_version, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-                    `).bind(
-            predictionId,
+            INSERT INTO submissions 
+            (id, user_id, image_url, caption, created_at, chaos, absurdity, 
+             memeability, caption_quality, unhinged, totalScore, grade, 
+             feedback, autoRated, manualOverride, confidence, challenge_id, 
+             streak_bonus, has_image, thumbnail_url, feedback_collected, 
+             ai_confidence, prediction_id, ai_version)
+            VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            id,
+            userName,
+            image || '',
             caption,
-            image || null,
-            JSON.stringify(aiRatings),
-            aiRatings.confidence || 0.85,
+            ratings.chaos_rating || 10,
+            ratings.absurdity_rating || 10,
+            ratings.meme_rating || 10,
+            10,  // caption_quality - fixed value
+            ratings.cursed_rating || 10,
+            totalScore,
+            grade,
+            `${grade} Grade! Score: ${totalScore}/100`,
+            useAI ? 1 : 0,
+            0,  // manualOverride
+            ratings.confidence || 0.7,
+            null,  // challenge_id
+            0,  // streak_bonus
+            image ? 1 : 0,
+            null,  // thumbnail_url
+            0,  // feedback_collected
+            ratings.confidence || 0.85,
+            predictionId,
             'v1.0'
         ).run();
+
+        return new Response(JSON.stringify({
+            success: true,
+            id,
+            ratings,
+            grade,
+            totalScore,
+            predictionId,
+            message: useAI ? 'AI-powered submission received!' : 'Manual submission received!'
+        }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+    } catch (error) {
+        console.error('Error in handleSubmitWithAI:', error);
+        return new Response(JSON.stringify({
+            error: 'Internal server error',
+            message: error.message
+        }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
-
-    const id = Math.floor(Math.random() * 1000000000);
-
-    const ratings = aiRatings || {
-        chaos_rating: 10,
-        absurdity_rating: 10,
-        meme_rating: 10,
-        cringe_rating: 10,
-        cursed_rating: 10,
-        total_score: 50,
-        confidence: 0.5
-    };
-
-    const totalScore = ratings.total_score || 50;
-    const grade = totalScore >= 80 ? 'S' :
-        totalScore >= 60 ? 'A' :
-            totalScore >= 40 ? 'B' :
-                totalScore >= 20 ? 'C' : 'F';
-
-    await env.DB.prepare(`
-                    INSERT INTO submissions 
-                    (id, user_id, image_url, caption, created_at, chaos, absurdity, 
-                     memeability, caption_quality, unhinged, totalScore, grade, 
-                     feedback, autoRated, manualOverride, confidence, challenge_id, 
-                     streak_bonus, has_image, thumbnail_url, feedback_collected, 
-                     ai_confidence, prediction_id, ai_version)
-                    VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `).bind(
-        id,
-        userName,  // Use the userName variable
-        image || '',
-        caption,
-        ratings.chaos_rating || 10,
-        ratings.absurdity_rating || 10,
-        ratings.meme_rating || 10,
-        10,
-        ratings.cursed_rating || 10,
-        totalScore,
-        grade,
-        `${grade} Grade! Score: ${totalScore}/100`,
-        useAI ? 1 : 0,
-        0,
-        0.7,
-        null,
-        0,
-        image ? 1 : 0,
-        null,
-        0,
-        ratings.confidence || 0.85,
-        predictionId,
-        'v1.0'
-    ).run();
-    return new Response(JSON.stringify({
-        success: true,
-        id,
-        ratings,
-        grade,
-        totalScore,
-        predictionId,
-        message: useAI ? 'AI-powered submission received!' : 'Manual submission received!'
-    }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
 }
 
 // ===== QUERY ENDPOINTS =====
