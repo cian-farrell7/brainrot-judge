@@ -587,8 +587,6 @@ async function handleSubmitWithAI(request, env, ctx, corsHeaders) {
             totalScore >= 40 ? 'B' :
                 totalScore >= 20 ? 'C' : 'F';
 
-    const userName = authCheck.user?.username || authCheck.user?.id;
-
     await env.DB.prepare(`
                     INSERT INTO submissions 
                     (id, user_id, image_url, caption, created_at, chaos, absurdity, 

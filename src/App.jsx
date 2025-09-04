@@ -140,6 +140,23 @@ function AppContent() {
         }
     };
 
+    const handleImageSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                alert('Image too large! Please select an image under 5MB.');
+                return;
+            }
+
+            setSelectedImageFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setSelectedImage(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const getAIRatingPreview = async () => {
         if (!caption.trim()) {
             alert('Please enter a caption first!');
@@ -192,47 +209,69 @@ function AppContent() {
             return;
         }
 
+        if (!user || !user.username) {
+            alert('Please log in to submit');
+            return;
+        }
+
         setIsLoading(true);
+        console.log('Submitting with user:', user.username); // Debug log
 
         try {
-            const response = await authenticatedFetch(`${API_URL}/api/submit`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    caption: caption,
-                    useAI: useAI,
-                    image: selectedImage
-                })
-            });
-
-            // Check if response is OK
-            if (!response.ok) {
-                if (response.status === 401) {
-                    alert('Please log in to submit');
-                    return;
-                }
-
-                // Try to get error details
-                try {
-                    const errorData = await response.json();
-                    console.error('Submit failed:', errorData);
-                    alert(`Failed to submit: ${errorData.message || 'Unknown error'}`);
-                } catch (e) {
-                    alert('Failed to submit. Please try again.');
-                }
+            // Get the auth token directly
+            const authToken = localStorage.getItem('authToken');
+            if (!authToken) {
+                alert('Authentication token not found. Please log in again.');
+                signOut();
                 return;
             }
 
-            // Parse successful response
-            const data = await response.json();
-            console.log('Submit response:', data); // Debug log
+            const submitData = {
+                caption: caption.trim(),
+                useAI: useAI,
+                image: selectedImage || null
+            };
 
-            if (data.success) {
+            console.log('Submitting data:', submitData); // Debug log
+
+            const response = await fetch(`${API_URL}/api/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify(submitData)
+            });
+
+            console.log('Response status:', response.status); // Debug log
+
+            // Try to parse response regardless of status
+            let data;
+            try {
+                data = await response.json();
+                console.log('Response data:', data); // Debug log
+            } catch (e) {
+                console.error('Failed to parse response:', e);
+                data = null;
+            }
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    alert('Session expired. Please log in again.');
+                    signOut();
+                    return;
+                }
+
+                const errorMessage = data?.error || data?.message || 'Failed to submit';
+                console.error('Submit failed:', errorMessage);
+                alert(`Error: ${errorMessage}`);
+                return;
+            }
+
+            if (data && data.success) {
                 const score = data.totalScore || 50;
                 const grade = data.grade || 'B';
-                alert(`${grade} Grade! Score: ${score}/100`);
+                alert(`🎉 ${grade} Grade! Score: ${score}/100`);
 
                 // Reset form
                 setCaption('');
@@ -244,16 +283,17 @@ function AppContent() {
                 setPredictionId(null);
 
                 // Refresh data
-                fetchSubmissions();
-                fetchLeaderboard();
-                fetchUserStreak();
+                await Promise.all([
+                    fetchSubmissions(),
+                    fetchLeaderboard(),
+                    fetchUserStreak()
+                ]);
             } else {
-                // Handle case where success is false
-                alert('Submission saved but no rating generated.');
+                alert('Submission processed but no rating generated. Please try again.');
             }
         } catch (error) {
             console.error('Submit error:', error);
-            alert('Failed to submit. Check console for details.');
+            alert(`Network error: ${error.message}. Please check your connection and try again.`);
         } finally {
             setIsLoading(false);
         }
@@ -315,141 +355,134 @@ function AppContent() {
         }
 
         try {
-            const response = await fetch(`${API_URL}/api/slang/add`, {
+            const response = await authenticatedFetch(`${API_URL}/api/slang/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    term: newSlangTerm,
+                    term: newSlangTerm.toLowerCase(),
                     weight: newSlangWeight,
-                    category: newSlangCategory,
-                    variants: []
+                    category: newSlangCategory
                 })
             });
 
             const data = await response.json();
             if (data.success) {
-                alert(`Added "${newSlangTerm}" to dictionary!`);
+                alert('Slang term added successfully!');
                 setNewSlangTerm('');
+                setNewSlangWeight(2.0);
             }
         } catch (error) {
-            console.error('Add slang error:', error);
-        }
-    };
-
-    const handleImageSelect = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setSelectedImageFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setSelectedImage(reader.result);
-            };
-            reader.readAsDataURL(file);
+            console.error('Error adding slang term:', error);
         }
     };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-900 via-black to-pink-900 text-white">
             {/* Header */}
-            <header className="p-4 border-b border-purple-500">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <h1 className="text-3xl font-bold flex items-center gap-2">
-                        🧠💩 Brainrot Judge v2.2
-                        <span className="text-sm bg-gradient-to-r from-purple-500 to-pink-500 px-2 py-1 rounded-full">
-                            AI Enhanced
-                        </span>
-                    </h1>
-                    <div className="flex items-center gap-4">
-                        {userStreak > 0 && (
-                            <div className="flex items-center gap-2">
-                                <span className="text-2xl">🔥</span>
-                                <span className="text-xl font-bold">{userStreak} day streak</span>
-                            </div>
-                        )}
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm bg-gray-700 px-3 py-1 rounded-lg">
-                                👤 {user.username}
-                            </span>
-                            <button
-                                onClick={signOut}
-                                className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-all"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-                    </div>
+            <header className="p-6 flex justify-between items-center bg-gray-900/50 backdrop-blur-md">
+                <h1 className="text-3xl font-bold text-gradient">
+                    🧠💩 Brainrot Judge
+                </h1>
+                <div className="flex items-center gap-4">
+                    <span className="text-sm">Welcome, {user.username}</span>
+                    <button
+                        onClick={signOut}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg"
+                    >
+                        Sign Out
+                    </button>
                 </div>
             </header>
 
-            {/* Daily Challenge Banner */}
-            {dailyChallenge && (
-                <div className="bg-gradient-to-r from-yellow-600 to-orange-600 p-3 text-center">
-                    <p className="text-lg font-bold">
-                        📢 Today's Challenge: {dailyChallenge.theme} (+{dailyChallenge.bonus_points} bonus points!)
-                    </p>
-                </div>
-            )}
+            {/* Tab Navigation */}
+            <nav className="p-4 flex gap-2 justify-center flex-wrap">
+                <button
+                    onClick={() => setActiveTab('upload')}
+                    className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'upload'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                        }`}
+                >
+                    📤 Upload
+                </button>
+                <button
+                    onClick={() => setActiveTab('history')}
+                    className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'history'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                        }`}
+                >
+                    📜 History
+                </button>
+                <button
+                    onClick={() => setActiveTab('leaderboard')}
+                    className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'leaderboard'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                        }`}
+                >
+                    🏆 Leaders
+                </button>
+                {isAdmin() && (
+                    <button
+                        onClick={() => setActiveTab('admin')}
+                        className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'admin'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                            : 'bg-gray-800 hover:bg-gray-700'
+                            }`}
+                    >
+                        ⚙️ Admin
+                    </button>
+                )}
+            </nav>
 
             {/* Main Content */}
-            <div className="max-w-7xl mx-auto p-4">
-                {/* Tab Navigation */}
-                <div className="flex gap-2 bg-gray-800 rounded-lg p-1 mb-6 overflow-x-auto">
-                    {['upload', 'leaders', 'history', 'achievements', 'ai-insights']
-                        .concat(isAdmin() ? ['admin'] : []).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`flex-1 min-w-[100px] py-2 px-4 rounded-lg transition-all whitespace-nowrap ${activeTab === tab
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                                    : 'text-gray-400 hover:text-white'
-                                    }`}
-                            >
-                                {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
-                            </button>
-                        ))}
-                </div>
-
+            <main className="p-6">
                 {/* Upload Tab */}
                 {activeTab === 'upload' && (
                     <div className="max-w-2xl mx-auto">
-                        <div className="bg-gray-800 rounded-xl p-6">
-                            <h2 className="text-2xl font-bold mb-6">Submit Your Chaos</h2>
-
-                            {/* Caption Input */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium mb-2">Your Brainrot Caption</label>
-                                <textarea
-                                    value={caption}
-                                    onChange={(e) => setCaption(e.target.value)}
-                                    placeholder="fr fr no cap this ohio rizz got me acting unwise 💀"
-                                    className="w-full p-4 bg-gray-700 rounded-lg text-white placeholder-gray-400 h-32 resize-none"
-                                />
-                                <p className="text-xs text-gray-400 mt-1">
-                                    Pro tip: Use "aura", "goon", "penjamin" for extra points!
-                                </p>
+                        {/* Daily Challenge */}
+                        {dailyChallenge && (
+                            <div className="bg-gradient-to-r from-purple-800 to-pink-800 rounded-xl p-4 mb-6">
+                                <h3 className="font-bold mb-2">🎯 Daily Challenge</h3>
+                                <p>{dailyChallenge.theme}</p>
+                                <p className="text-sm opacity-75">+{dailyChallenge.bonus_points} bonus points!</p>
                             </div>
+                        )}
 
-                            {/* Image Upload */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium mb-2">
-                                    Add Chaos Image (Optional)
+                        {/* Upload Form */}
+                        <div className="bg-gray-800 rounded-xl p-6">
+                            <div className="mb-6">
+                                <label className="block mb-2 font-medium">
+                                    📸 Image (Optional)
                                 </label>
                                 <input
                                     type="file"
                                     accept="image/*"
                                     onChange={handleImageSelect}
-                                    className="w-full p-2 bg-gray-700 rounded-lg"
+                                    className="w-full p-3 bg-gray-700 rounded-lg"
                                 />
                                 {selectedImage && (
                                     <img
                                         src={selectedImage}
                                         alt="Preview"
-                                        className="mt-2 h-32 rounded-lg object-cover"
+                                        className="mt-4 max-h-64 rounded-lg mx-auto"
                                     />
                                 )}
                             </div>
 
-                            {/* AI Toggle */}
+                            <div className="mb-6">
+                                <label className="block mb-2 font-medium">
+                                    💭 Caption
+                                </label>
+                                <textarea
+                                    value={caption}
+                                    onChange={(e) => setCaption(e.target.value)}
+                                    placeholder="Enter your most unhinged caption..."
+                                    className="w-full p-3 bg-gray-700 rounded-lg h-32 placeholder-gray-400"
+                                />
+                            </div>
+
                             <div className="mb-6 flex items-center gap-3">
                                 <input
                                     type="checkbox"
@@ -458,17 +491,16 @@ function AppContent() {
                                     onChange={(e) => setUseAI(e.target.checked)}
                                     className="w-5 h-5"
                                 />
-                                <label htmlFor="useAI" className="text-sm">
-                                    Use AI-Enhanced Rating (Recommended)
+                                <label htmlFor="useAI" className="cursor-pointer">
+                                    🤖 Use AI Rating
                                 </label>
                             </div>
 
-                            {/* Action Buttons */}
                             <div className="flex gap-3">
                                 <button
                                     onClick={getAIRatingPreview}
                                     disabled={isLoading || !caption.trim()}
-                                    className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-bold disabled:opacity-50 transition-all"
+                                    className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-bold disabled:opacity-50"
                                 >
                                     {isLoading ? 'Analyzing...' : '🤖 Preview AI Rating'}
                                 </button>
@@ -499,31 +531,11 @@ function AppContent() {
                                                         <span className="text-sm capitalize">
                                                             {key.replace('_', ' ')}
                                                         </span>
-                                                        <span className="font-bold text-purple-400">
-                                                            {value}/20
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-600 rounded-full h-2 mt-1">
-                                                        <div
-                                                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
-                                                            style={{ width: `${(value / 20) * 100}%` }}
-                                                        />
+                                                        <span className="font-bold">{value}/20</span>
                                                     </div>
                                                 </div>
                                             );
                                         })}
-                                    </div>
-
-                                    {/* Total Score */}
-                                    <div className="mt-3 p-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium">Total Score</span>
-                                            <span className="text-2xl font-bold">
-                                                {Object.values(aiRatings)
-                                                    .filter(v => typeof v === 'number')
-                                                    .reduce((a, b) => a + b, 0)}/100
-                                            </span>
-                                        </div>
                                     </div>
 
                                     {/* Feedback Buttons */}
@@ -546,45 +558,11 @@ function AppContent() {
 
                                     {feedbackGiven && (
                                         <div className="mt-3 p-2 bg-green-800 rounded-lg text-center">
-                                            ✓ Thanks for improving our AI!
+                                            ✔ Thanks for improving our AI!
                                         </div>
                                     )}
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Leaders Tab */}
-                {activeTab === 'leaders' && (
-                    <div className="max-w-4xl mx-auto">
-                        <div className="bg-gray-800 rounded-xl p-6">
-                            <h2 className="text-2xl font-bold mb-6">Leaderboard</h2>
-                            <div className="space-y-3">
-                                {leaderboard.map((user, index) => (
-                                    <div key={user.user_id || user.user_name || index} className="bg-gray-700 rounded-lg p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-2xl font-bold">
-                                                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                                            </span>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-purple-400">👤</span>
-                                                <span className="font-medium text-purple-400">
-                                                    @{user.user_name || user.user_id || 'Unknown'}  {/* FIXED: Changed sub to user */}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-bold text-purple-400">
-                                                {(user.avg_score || 0).toFixed(1)} avg
-                            </div>
-                                            <div className="text-sm text-gray-400">
-                                                {user.submission_count || 0} submissions
-                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
                         </div>
                     </div>
                 )}
@@ -609,56 +587,15 @@ function AppContent() {
                                     .map(sub => (
                                         <div key={sub.id} className="bg-gray-700 rounded-lg p-4">
                                             <div className="flex justify-between items-start mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-purple-400">👤</span>
-                                                    <span className="font-medium text-purple-400">
-                                                        @{sub.user_id || sub.user_name || 'Anonymous'}
-                                                    </span>
-                                                </div>
-                                                // Add this temporarily in the History tab to debug:
-                                                {submissions.slice(0, 1).map(sub => (
-                                                    <div key="debug" className="bg-yellow-600 p-2 mb-4 rounded text-xs">
-                                                        Debug: user_id="{sub.user_id}", user_name="{sub.user_name}"
-                                                    </div>
-                                                ))}
+                                                <span className="font-medium text-purple-400">{sub.user_id}</span>
                                                 <span className="text-2xl font-bold">{sub.grade}</span>
                                             </div>
-
-                                            {/* ===== ADD IMAGE HERE - THIS IS NEW ===== */}
-                                            {(sub.thumbnail_url || sub.image_url) && (
-                                                <div className="mb-3 rounded-lg overflow-hidden">
-                                                    <img
-                                                        src={sub.thumbnail_url || sub.image_url}
-                                                        alt="Submission"
-                                                        className="w-full max-w-sm h-48 object-cover"
-                                                        onError={(e) => {
-                                                            e.target.style.display = 'none';
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-                                            {/* ===== END OF IMAGE SECTION ===== */}
-
                                             <p className="text-gray-300 mb-2">{sub.caption}</p>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-yellow-400 font-semibold">
-                                                    Score: {sub.totalScore || sub.total_score ||
-                                                        (sub.chaos_rating + sub.absurdity_rating + sub.meme_rating +
-                                                            sub.cringe_rating + sub.cursed_rating) || 0}/100
-                                </span>
-                                                {sub.ai_confidence > 0 && (
-                                                    <span className="text-purple-400">
-                                                        AI: {(sub.ai_confidence * 100).toFixed(0)}% confident
-                                                    </span>
-                                                )}
+                                            <div className="flex gap-4 text-sm">
+                                                <span>Score: {sub.totalScore}/100</span>
+                                                <span>Chaos: {sub.chaos}/20</span>
+                                                <span>Meme: {sub.memeability}/20</span>
                                             </div>
-
-                                            {/* ===== OPTIONAL: ADD TIMESTAMP ===== */}
-                                            {sub.created_at && (
-                                                <div className="text-xs text-gray-500 mt-2">
-                                                    {new Date(sub.created_at).toLocaleString()}
-                                                </div>
-                                            )}
                                         </div>
                                     ))}
                             </div>
@@ -666,29 +603,23 @@ function AppContent() {
                     </div>
                 )}
 
-                {/* Achievements Tab */}
-                {activeTab === 'achievements' && (
+                {/* Leaderboard Tab */}
+                {activeTab === 'leaderboard' && (
                     <div className="max-w-4xl mx-auto">
                         <div className="bg-gray-800 rounded-xl p-6">
-                            <h2 className="text-2xl font-bold mb-6">Achievements</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {achievements.map(achievement => (
-                                    <div
-                                        key={achievement.id}
-                                        className={`p-4 rounded-lg ${achievement.unlocked_at
-                                            ? 'bg-gradient-to-r from-purple-700 to-pink-700'
-                                            : 'bg-gray-700 opacity-50'
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-2xl">{achievement.icon || '🏆'}</span>
-                                            <div className="flex-1">
-                                                <h3 className="font-bold">{achievement.name}</h3>
-                                                <p className="text-sm text-gray-300">{achievement.description}</p>
-                                            </div>
-                                            {achievement.unlocked_at && (
-                                                <span className="text-green-400">✓</span>
-                                            )}
+                            <h2 className="text-2xl font-bold mb-6">🏆 Top Brainrotters</h2>
+                            <div className="space-y-3">
+                                {leaderboard.map((entry, index) => (
+                                    <div key={entry.user_name} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-2xl font-bold">
+                                                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                                            </span>
+                                            <span className="font-medium">{entry.user_name}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-lg">{entry.avg_score?.toFixed(1)}</div>
+                                            <div className="text-sm text-gray-400">{entry.submission_count} submissions</div>
                                         </div>
                                     </div>
                                 ))}
@@ -697,184 +628,81 @@ function AppContent() {
                     </div>
                 )}
 
-                {/* AI Insights Tab */}
-                {activeTab === 'ai-insights' && (
-                    <div className="max-w-4xl mx-auto">
-                        <div className="bg-gray-800 rounded-xl p-6">
-                            <h2 className="text-2xl font-bold mb-6">AI Training Insights</h2>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                <div className="bg-gray-700 rounded-lg p-4">
-                                    <h3 className="font-bold mb-2">Model Performance</h3>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span>AI Weight:</span>
-                                            <span className="text-purple-400">70%</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Traditional Weight:</span>
-                                            <span className="text-purple-400">30%</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Model Version:</span>
-                                            <span className="text-purple-400">v1.0</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Feedback Collected:</span>
-                                            <span className="text-purple-400">{trainingData?.totalFeedback || 0}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-700 rounded-lg p-4">
-                                    <h3 className="font-bold mb-2">Top Slang Terms</h3>
-                                    <div className="space-y-1 text-sm">
-                                        <div className="text-purple-400">• "aura" (weight: 4.0)</div>
-                                        <div className="text-purple-400">• "skibidi" (weight: 4.0)</div>
-                                        <div className="text-purple-400">• "rizz" (weight: 3.5)</div>
-                                        <div className="text-purple-400">• "ohio" (weight: 3.5)</div>
-                                        <div className="text-purple-400">• "goon" (weight: 3.0)</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Slang Analyzer */}
-                            <div className="bg-gray-700 rounded-lg p-4 mb-6">
-                                <h3 className="font-bold mb-3">Test Slang Analyzer</h3>
-                                <div className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        value={slangTestText}
-                                        onChange={(e) => setSlangTestText(e.target.value)}
-                                        placeholder="Enter text to analyze..."
-                                        className="flex-1 p-2 bg-gray-600 rounded-lg"
-                                    />
-                                    <button
-                                        onClick={analyzeSlang}
-                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
-                                    >
-                                        Analyze
-                                    </button>
-                                </div>
-
-                                {slangAnalysis && (
-                                    <div className="mt-3 p-3 bg-gray-800 rounded">
-                                        <div className="grid grid-cols-3 gap-2 text-sm">
-                                            <div>
-                                                <span className="text-gray-400">Score:</span>
-                                                <span className="ml-2 text-purple-400 font-bold">
-                                                    {slangAnalysis.score}/20
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-gray-400">Terms:</span>
-                                                <span className="ml-2 text-purple-400 font-bold">
-                                                    {slangAnalysis.analysis?.detectedTerms?.length || 0}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-gray-400">Density:</span>
-                                                <span className="ml-2 text-purple-400 font-bold">
-                                                    {slangAnalysis.analysis?.density?.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {slangAnalysis.analysis?.detectedTerms?.length > 0 && (
-                                            <div className="mt-2">
-                                                <p className="text-xs text-gray-400 mb-1">Detected:</p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {slangAnalysis.analysis.detectedTerms.map((term, i) => (
-                                                        <span key={i} className="text-xs px-2 py-1 bg-purple-600 rounded">
-                                                            {term.term} ({term.weight}w)
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="bg-gray-700 rounded-lg p-4">
-                                <h3 className="font-bold mb-3">How AI Scoring Works</h3>
-                                <p className="text-sm text-gray-300 mb-2">
-                                    Our AI analyzes your caption for:
-                                </p>
-                                <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
-                                    <li>Slang density and tier (elite terms score higher)</li>
-                                    <li>Meme references and internet culture</li>
-                                    <li>Chaos and randomness levels</li>
-                                    <li>Emoji usage and placement</li>
-                                    <li>Trending topics and viral potential</li>
-                                </ul>
-                                <p className="text-sm text-gray-400 mt-3">
-                                    Every feedback you provide helps improve accuracy!
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {/* Admin Tab */}
-                {activeTab === 'admin' && !isAdmin() && (
-                    <div className="max-w-4xl mx-auto">
-                        <div className="bg-red-800 rounded-xl p-6 text-center">
-                            <h2 className="text-2xl font-bold mb-4">🚫 Access Denied</h2>
-                            <p className="text-gray-300">You don't have permission to access the admin panel.</p>
-                            <button onClick={() => setActiveTab('upload')} className="mt-4 px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg">
-                                Go Back
-            </button>
-                        </div>
-                    </div>
-                )}
                 {activeTab === 'admin' && isAdmin() && (
-                    <div className="max-w-4xl mx-auto">
+                    <div className="max-w-4xl mx-auto space-y-6">
                         <div className="bg-gray-800 rounded-xl p-6">
                             <h2 className="text-2xl font-bold mb-6">Admin Panel</h2>
 
                             {/* Add Slang Term */}
-                            <div className="bg-gray-700 rounded-lg p-4 mb-6">
-                                <h3 className="font-bold mb-3">Add New Slang Term</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="mb-6">
+                                <h3 className="font-bold mb-3">Add Slang Term</h3>
+                                <div className="grid grid-cols-4 gap-3">
                                     <input
                                         type="text"
+                                        placeholder="Term"
                                         value={newSlangTerm}
                                         onChange={(e) => setNewSlangTerm(e.target.value)}
-                                        placeholder="Term (e.g., 'bussin')"
-                                        className="p-2 bg-gray-600 rounded-lg"
+                                        className="p-2 bg-gray-700 rounded-lg"
                                     />
                                     <input
                                         type="number"
+                                        placeholder="Weight"
                                         value={newSlangWeight}
                                         onChange={(e) => setNewSlangWeight(parseFloat(e.target.value))}
-                                        min="0"
-                                        max="5"
+                                        className="p-2 bg-gray-700 rounded-lg"
                                         step="0.5"
-                                        placeholder="Weight (0-5)"
-                                        className="p-2 bg-gray-600 rounded-lg"
+                                        min="0.5"
+                                        max="5"
                                     />
                                     <select
                                         value={newSlangCategory}
                                         onChange={(e) => setNewSlangCategory(e.target.value)}
-                                        className="p-2 bg-gray-600 rounded-lg"
+                                        className="p-2 bg-gray-700 rounded-lg"
                                     >
                                         <option value="chaos">Chaos</option>
                                         <option value="meme">Meme</option>
                                         <option value="trending">Trending</option>
                                         <option value="elite">Elite</option>
-                                        <option value="reaction">Reaction</option>
                                     </select>
+                                    <button
+                                        onClick={addSlangTerm}
+                                        className="p-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+                                    >
+                                        Add Term
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={addSlangTerm}
-                                    className="mt-3 px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg"
-                                >
-                                    Add Term
-                                </button>
+                            </div>
+
+                            {/* Slang Analyzer */}
+                            <div className="mb-6">
+                                <h3 className="font-bold mb-3">Test Slang Analyzer</h3>
+                                <div className="flex gap-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Enter text to analyze..."
+                                        value={slangTestText}
+                                        onChange={(e) => setSlangTestText(e.target.value)}
+                                        className="flex-1 p-2 bg-gray-700 rounded-lg"
+                                    />
+                                    <button
+                                        onClick={analyzeSlang}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+                                    >
+                                        Analyze
+                                    </button>
+                                </div>
+                                {slangAnalysis && (
+                                    <div className="mt-3 p-3 bg-gray-700 rounded-lg">
+                                        <div>Score: {slangAnalysis.score}/100</div>
+                                        <div>Detected Terms: {slangAnalysis.analysis?.detectedTerms?.join(', ')}</div>
+                                        <div>Density: {slangAnalysis.analysis?.density?.toFixed(2)}%</div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Training Data */}
-                            <div className="bg-gray-700 rounded-lg p-4">
+                            <div className="mb-6">
                                 <h3 className="font-bold mb-3">Training Data</h3>
                                 <button
                                     onClick={fetchTrainingData}
@@ -911,7 +739,7 @@ function AppContent() {
                         </div>
                     </div>
                 )}
-            </div>
+            </main>
         </div>
     );
 }

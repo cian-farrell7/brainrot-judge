@@ -13,10 +13,10 @@
         "deploy:frontend": "npm run build && netlify deploy --prod",
         "worker:dev": "wrangler dev",
         "db:migrate": "wrangler d1 execute brainrot-judge-db --remote --file=migrations/ai-enhancement.sql",
-        "test:api": "node scripts/test-api.js",
         "populate:slang": "node scripts/populate-slang.js",
         "health": "node scripts/health-check.js",
-        "check": "npm run health && npm run test:api"
+        "test:api": "node scripts/test-api.js",
+        "test:full": "npm run health && npm run test:api"
     },
     "dependencies": {
         "lucide-react": "^0.263.1",
