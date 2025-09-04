@@ -399,8 +399,8 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('upload')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'upload'
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                            : 'bg-gray-800 hover:bg-gray-700'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     📤 Upload
@@ -408,8 +408,8 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('history')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'history'
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                            : 'bg-gray-800 hover:bg-gray-700'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     📜 History
@@ -417,18 +417,27 @@ function AppContent() {
                 <button
                     onClick={() => setActiveTab('leaderboard')}
                     className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'leaderboard'
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                            : 'bg-gray-800 hover:bg-gray-700'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                 >
                     🏆 Leaders
                 </button>
+                <button
+                    onClick={() => setActiveTab('insights')}
+                    className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'insights'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                        }`}
+                >
+                    🧠 AI Insights
+</button>
                 {isAdmin() && (
                     <button
                         onClick={() => setActiveTab('admin')}
                         className={`px-6 py-2 rounded-lg font-bold ${activeTab === 'admin'
-                                ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                                : 'bg-gray-800 hover:bg-gray-700'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                            : 'bg-gray-800 hover:bg-gray-700'
                             }`}
                     >
                         ⚙️ Admin
@@ -580,6 +589,7 @@ function AppContent() {
                                     {showAllUsers ? 'All Users' : 'My History'}
                                 </button>
                             </div>
+
                             <div className="space-y-4">
                                 {submissions
                                     .filter(sub => showAllUsers || sub.user_id === user.username)
@@ -590,11 +600,23 @@ function AppContent() {
                                                 <span className="font-medium text-purple-400">{sub.user_id}</span>
                                                 <span className="text-2xl font-bold">{sub.grade}</span>
                                             </div>
+                                            {/* Show image if it exists */}
+                                            {sub.image_url && sub.image_url.length > 100 && (
+                                                <img
+                                                    src={sub.image_url}
+                                                    alt="Submission image"
+                                                    className="w-full max-h-64 object-contain rounded-lg bg-gray-800 mb-3"
+                                                    style={{ display: 'block' }}
+                                                />
+                                            )}
                                             <p className="text-gray-300 mb-2">{sub.caption}</p>
                                             <div className="flex gap-4 text-sm">
                                                 <span>Score: {sub.totalScore}/100</span>
                                                 <span>Chaos: {sub.chaos}/20</span>
                                                 <span>Meme: {sub.memeability}/20</span>
+                                                {sub.has_image === 1 && (
+                                                    <span className="text-green-400">📸</span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}

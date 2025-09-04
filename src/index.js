@@ -679,8 +679,8 @@ async function handleSubmitWithAI(request, env, ctx, corsHeaders) {
             ((ratings.chaos_rating || 10) +
                 (ratings.absurdity_rating || 10) +
                 (ratings.meme_rating || 10) +
-                (ratings.cursed_rating || 10)) * 2.5
-        );  // * 2.5 to scale to 100
+                (ratings.cursed_rating || 10)) / 80 * 100
+        );  // Divide by 80 (max possible) then multiply by 100 to get percentage
 
         const grade = totalScore >= 80 ? 'S' :
             totalScore >= 60 ? 'A' :
@@ -746,13 +746,35 @@ async function handleSubmitWithAI(request, env, ctx, corsHeaders) {
 
 // ===== QUERY ENDPOINTS =====
 
-async function getSubmissions(env, corsHeaders) {
+// In your index.js, find the getSubmissions function and update it:
 
+async function getSubmissions(env, corsHeaders) {
+    // IMPORTANT: Include image_url in the SELECT statement
     const submissions = await env.DB.prepare(`
-            SELECT * FROM submissions 
-            ORDER BY created_at DESC 
-            LIMIT 50
-        `).all();
+        SELECT 
+            id,
+            user_id,
+            caption,
+            image_url,  -- ADD THIS LINE to fetch images
+            created_at,
+            chaos,
+            absurdity,
+            memeability,
+            caption_quality,
+            unhinged,
+            totalScore,
+            grade,
+            feedback,
+            autoRated,
+            manualOverride,
+            confidence,
+            has_image,
+            ai_confidence,
+            prediction_id
+        FROM submissions 
+        ORDER BY created_at DESC 
+        LIMIT 50
+    `).all();
 
     return new Response(JSON.stringify({
         success: true,
