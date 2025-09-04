@@ -1,0 +1,43 @@
+/* src/index.css - Tailwind CSS Base */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for Tailwind */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply bg-black text-white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-bold transition-all hover:from-purple-600 hover:to-pink-600 disabled:opacity-50;
+  }
+  
+  .btn-secondary {
+    @apply py-3 px-6 bg-gray-700 rounded-lg font-bold transition-all hover:bg-gray-600 disabled:opacity-50;
+  }
+  
+  .card {
+    @apply bg-gray-800 rounded-xl p-6;
+  }
+  
+  .input-field {
+    @apply w-full p-3 bg-gray-700 rounded-lg text-white placeholder-gray-400;
+  }
+}
+
+@layer utilities {
+  .gradient-purple-pink {
+    @apply bg-gradient-to-r from-purple-500 to-pink-500;
+  }
+  
+  .text-gradient {
+    @apply bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent;
+  }
+}

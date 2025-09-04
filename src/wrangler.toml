@@ -1,0 +1,75 @@
+name = "brainrot-api"
+main = "index.js"
+compatibility_date = "2024-09-02"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker settings
+[vars]
+API_VERSION = "2.1.0"
+ENVIRONMENT = "production"
+AI_MODEL_VERSION = "v1.0"
+AI_WEIGHT_DEFAULT = "0.7"
+FEEDBACK_THRESHOLD = "100"
+JWT_SECRET = "5S+cd8sbWbBPQ/0FIs/6snxqPcYcE1NZdXtFKKwfC0k="
+
+# AI Configuration
+[ai]
+binding = "AI"  # This binds Cloudflare Workers AI
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "brainrot-judge-db"
+database_id = "e6285a3a-0168-4eae-bece-8d671a9ca6f9"
+
+# R2 Storage binding for images
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "brainrot-images"
+
+# Analytics Engine for tracking AI performance
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+
+# KV namespace for caching AI predictions
+[[kv_namespaces]]
+binding = "AI_CACHE"
+id = "49053c532b17401a92c702ba54d87fc6"
+preview_id = "ca46e5e28f3041bcb57cc81a57edf29c"
+
+# Durable Objects for real-time features (future enhancement)
+# [[durable_objects.bindings]]
+# name = "REALTIME"
+# class_name = "RealtimeCoordinator"
+
+# Development environment
+[env.development]
+name = "brainrot-api-dev"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+AI_WEIGHT_DEFAULT = "0.5"  # Less AI weight in dev for testing
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "brainrot-judge-db-dev"
+database_id = "your-dev-db-id"
+
+# Staging environment for A/B testing
+[env.staging]
+name = "brainrot-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+AI_MODEL_VERSION = "v1.1-beta"
+AI_WEIGHT_DEFAULT = "0.8"  # Test higher AI weight
+
+# Custom routes (uncomment and update when you have a custom domain)
+# [[routes]]
+# pattern = "api.brainrotjudge.com/*"
+# zone_name = "brainrotjudge.com"
+
+# Deployment settings
+[build]
+command = "npm install"
+
