@@ -1,0 +1,19 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.xki6nS0W-9Y8OdrmugFBCJihfBOQ75xYPzaPqXml }}
+          accountId: ${{ secrets.672daa96dea6ef294029707d9a3a90f5 }}
+          command: deploy
